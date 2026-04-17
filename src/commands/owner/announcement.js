@@ -1,27 +1,76 @@
-const { SlashCommandBuilder } = require('discord.js');
+const { ApplicationCommandOptionType } = require("discord.js");
 
+/**
+ * @type {import("@structures/Command")}
+ */
 module.exports = {
-    data: new SlashCommandBuilder()
-        .setName('announce')
-        .setDescription('Sends an announcement to a specific channel (Owner Only)')
-        .addStringOption(option => option.setName('guild_id').setDescription('Target Server ID').setRequired(true))
-        .addStringOption(option => option.setName('channel_id').setDescription('Target Channel ID').setRequired(true))
-        .addStringOption(option => option.setName('message').setDescription('Announcement text').setRequired(true)),
-    async execute(interaction) {
-        const ownerId = "1469310778518536265";
-        if (interaction.user.id !== ownerId) return interaction.reply({ content: "Owner only!", ephemeral: true });
+  name: "announce",
+  description: "Sends an announcement to a specific channel (Owner Only)",
+  category: "OWNER",
+  command: {
+    enabled: true,
+    minArgsCount: 3,
+    usage: "<guildId> <channelId> <message>",
+  },
+  slashCommand: {
+    enabled: true,
+    options: [
+      {
+        name: "guild_id",
+        description: "Target Server ID",
+        type: ApplicationCommandOptionType.String,
+        required: true,
+      },
+      {
+        name: "channel_id",
+        description: "Target Channel ID",
+        type: ApplicationCommandOptionType.String,
+        required: true,
+      },
+      {
+        name: "message",
+        description: "Announcement text",
+        type: ApplicationCommandOptionType.String,
+        required: true,
+      },
+    ],
+  },
 
-        const gId = interaction.options.getString('guild_id');
-        const cId = interaction.options.getString('channel_id');
-        const msg = interaction.options.getString('message');
+  async messageRun(message, args) {
+    const ownerId = "1469310778518536265";
+    if (message.author.id !== ownerId) return message.safeReply("Owner only command.");
 
-        try {
-            const guild = await interaction.client.guilds.fetch(gId);
-            const channel = await guild.channels.fetch(cId);
-            await channel.send(msg);
-            await interaction.reply({ content: "Announcement sent successfully!", ephemeral: true });
-        } catch (err) {
-            await interaction.reply({ content: "Error: Check IDs or Bot permissions.", ephemeral: true });
-        }
-    },
+    const gId = args[0];
+    const cId = args[1];
+    const msg = args.slice(2).join(" ");
+    return runAnnounce(message, gId, cId, msg);
+  },
+
+  async interactionRun(interaction) {
+    const ownerId = "1469310778518536265";
+    if (interaction.user.id !== ownerId) {
+      return interaction.reply({ content: "Owner only command.", ephemeral: true });
+    }
+
+    const gId = interaction.options.getString("guild_id");
+    const cId = interaction.options.getString("channel_id");
+    const msg = interaction.options.getString("message");
+    return runAnnounce(interaction, gId, cId, msg);
+  },
 };
+
+async function runAnnounce(ctx, guildId, channelId, msg) {
+  try {
+    const guild = await ctx.client.guilds.fetch(guildId);
+    const channel = await guild.channels.fetch(channelId);
+
+    if (!channel || !channel.isTextBased()) throw new Error();
+
+    await channel.send(msg);
+    const success = "Announcement sent successfully!";
+    return ctx.reply ? ctx.reply({ content: success, ephemeral: true }) : ctx.safeReply(success);
+  } catch (err) {
+    const error = "Error: Check if IDs are correct and if the bot has access to that channel.";
+    return ctx.reply ? ctx.reply({ content: error, ephemeral: true }) : ctx.safeReply(error);
+  }
+}

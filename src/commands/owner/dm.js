@@ -1,81 +1,74 @@
-const { SlashCommandBuilder, EmbedBuilder } = require('discord.js');
+const { EmbedBuilder, ApplicationCommandOptionType } = require("discord.js");
 
+/**
+ * @type {import("@structures/Command")}
+ */
 module.exports = {
-    data: new SlashCommandBuilder()
-        .setName('dm')
-        .setDescription('Send a DM to a user by selecting them or using their ID (Owner Only)')
-        // Mesaj içeriği (Zorunlu)
-        .addStringOption(option => 
-            option.setName('message')
-                .setDescription('The message you want to send')
-                .setRequired(true))
-        // Kullanıcı seçme (Opsiyonel)
-        .addUserOption(option => 
-            option.setName('target')
-                .setDescription('Select a user from the server list'))
-        // ID ile yazma (Opsiyonel)
-        .addStringOption(option => 
-            option.setName('user_id')
-                .setDescription('Or paste the User ID here')),
+  name: "dm",
+  description: "Send a DM to a user (Owner Only)",
+  category: "OWNER",
+  botPermissions: ["EmbedLinks"],
+  command: {
+    enabled: true,
+    minArgsCount: 2,
+    usage: "<userId> <message>",
+  },
+  slashCommand: {
+    enabled: true,
+    options: [
+      {
+        name: "message",
+        description: "The message you want to send",
+        type: ApplicationCommandOptionType.String,
+        required: true,
+      },
+      {
+        name: "user_id",
+        description: "Paste the User ID here",
+        type: ApplicationCommandOptionType.String,
+        required: true,
+      },
+    ],
+  },
 
-    async execute(interaction) {
-        // --- AYARLAR ---
-        const ownerId = "1469310778518536265"; // Kendi ID'ni buraya yapıştır
-        
-        // Yetki Kontrolü
-        if (interaction.user.id !== ownerId) {
-            return interaction.reply({ 
-                content: "❌ Access Denied: This command is restricted to the bot owner.", 
-                ephemeral: true 
-            });
-        }
+  async messageRun(message, args) {
+    const ownerId = "1469310778518536265";
+    if (message.author.id !== ownerId) return message.safeReply("Owner only command.");
 
-        const messageContent = interaction.options.getString('message');
-        const targetUser = interaction.options.getUser('target');
-        const targetId = interaction.options.getString('user_id');
+    const targetId = args[0];
+    const content = args.slice(1).join(" ");
+    return runDm(message, targetId, content);
+  },
 
-        let user;
+  async interactionRun(interaction) {
+    const ownerId = "1469310778518536265";
+    if (interaction.user.id !== ownerId) {
+      return interaction.reply({ content: "Owner only command.", ephemeral: true });
+    }
 
-        // Öncelik: Eğer listeden kullanıcı seçildiyse onu kullan
-        if (targetUser) {
-            user = targetUser;
-        } 
-        // Eğer listeden seçilmediyse ama ID girildiyse ID ile bulmaya çalış
-        else if (targetId) {
-            try {
-                user = await interaction.client.users.fetch(targetId);
-            } catch (error) {
-                return interaction.reply({ content: "❌ Invalid User ID. I couldn't find anyone with that ID.", ephemeral: true });
-            }
-        } 
-        // İkisi de girilmediyse hata ver
-        else {
-            return interaction.reply({ content: "❌ You must either select a user or provide a User ID!", ephemeral: true });
-        }
-
-        try {
-            // Şık bir Embed hazırlayalım
-            const dmEmbed = new EmbedBuilder()
-                .setTitle("📩 New Message from Support")
-                .setDescription(messageContent)
-                .setColor("#7289DA")
-                .setFooter({ text: `Sent by ${interaction.user.tag}`, iconURL: interaction.user.displayAvatarURL() })
-                .setTimestamp();
-
-            await user.send({ embeds: [dmEmbed] });
-
-            // Onay mesajı
-            await interaction.reply({ 
-                content: `✅ Successfully sent the message to **${user.tag}**!`, 
-                ephemeral: true 
-            });
-
-        } catch (error) {
-            console.error(error);
-            await interaction.reply({ 
-                content: `❌ I couldn't DM **${user.tag}**. Their DMs might be closed or they have blocked the bot.`, 
-                ephemeral: true 
-            });
-        }
-    },
+    const content = interaction.options.getString("message");
+    const targetId = interaction.options.getString("user_id");
+    return runDm(interaction, targetId, content);
+  },
 };
+
+async function runDm(ctx, targetId, content) {
+  try {
+    const user = await ctx.client.users.fetch(targetId);
+    const author = ctx.author || ctx.user;
+
+    const dmEmbed = new EmbedBuilder()
+      .setTitle("📩 New Message from Support")
+      .setDescription(content)
+      .setColor("#7289DA")
+      .setFooter({ text: `Sent by ${author.tag}`, iconURL: author.displayAvatarURL() })
+      .setTimestamp();
+
+    await user.send({ embeds: [dmEmbed] });
+    const success = `✅ Message successfully sent to **${user.tag}**!`;
+    return ctx.reply ? ctx.reply({ content: success, ephemeral: true }) : ctx.safeReply(success);
+  } catch (error) {
+    const fail = "❌ Failed to DM user. Their DMs might be closed.";
+    return ctx.reply ? ctx.reply({ content: fail, ephemeral: true }) : ctx.safeReply(fail);
+  }
+}
