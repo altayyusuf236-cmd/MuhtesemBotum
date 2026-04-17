@@ -1,18 +1,12 @@
 const LOG_CHANNEL_ID = "1479934586132758701";
-
-// --- EXPRESS (RENDER UPTIME) ---
-// const express = require('express');
-// const app = express();
-// app.get('/', (req, res) => res.send('Bot Aktif! ✅'));
-// app.listen(process.env.PORT || 10000); 
+const BOT_VERSION = "1.3"; // Versiyonu her değiştirdiğinde yeni notu paylaşır
 
 require("dotenv").config();
 require("module-alias/register");
 
-// Discord.js bileşenlerini en üstte tanımlıyoruz (Çökmemesi için şart)
-const { EmbedBuilder } = require('discord.js');
+const { EmbedBuilder, REST, Routes, ActivityType } = require('discord.js');
 
-// register extenders
+// Extenders
 require("@helpers/extenders/Message");
 require("@helpers/extenders/Guild");
 require("@helpers/extenders/GuildChannel");
@@ -24,13 +18,11 @@ const { validateConfiguration } = require("@helpers/Validator");
 
 validateConfiguration();
 
-// initialize client
 const client = new BotClient();
 client.loadCommands("src/commands");
 client.loadContexts("src/contexts");
 client.loadEvents("src/events");
 
-// find unhandled promise rejections
 process.on("unhandledRejection", (err) => client.logger.error(`Unhandled exception`, err));
 
 // --- YARDIMCI LOG FONKSİYONU ---
@@ -38,55 +30,37 @@ async function sendLog(embed) {
     try {
         const channel = await client.channels.fetch(LOG_CHANNEL_ID);
         if (channel) channel.send({ embeds: [embed] });
-    } catch (err) { console.error("Log gönderilemedi:", err); }
+    } catch (err) { console.error("Log hatası:", err); }
 }
 
-// --- LOG EVENTLERİ ---
+// --- DEVASA LOG SİSTEMİ (HER ŞEY) ---
 
-// 1. SES KANALI AKTİVİTELERİ
+// 1. SES KANALI LOGLARI
 client.on('voiceStateUpdate', (oldState, newState) => {
     const user = newState.member.user;
-    let embed = new EmbedBuilder().setTimestamp().setColor("Blue");
+    const embed = new EmbedBuilder().setTimestamp().setFooter({ text: `ID: ${user.id}` });
 
     if (!oldState.channelId && newState.channelId) {
-        embed.setTitle("🎤 Voice: Joined").setDescription(`**${user.tag}** joined <#${newState.channelId}>`).setColor("Green");
+        embed.setTitle("🎤 Voice Joined").setDescription(`**${user.tag}** joined <#${newState.channelId}>`).setColor("Green");
     } else if (oldState.channelId && !newState.channelId) {
-        embed.setTitle("🎤 Voice: Left").setDescription(`**${user.tag}** left <#${oldState.channelId}>`).setColor("Red");
+        embed.setTitle("🎤 Voice Left").setDescription(`**${user.tag}** left <#${oldState.channelId}>`).setColor("Red");
     } else if (oldState.channelId !== newState.channelId) {
-        embed.setTitle("🎤 Voice: Moved").setDescription(`**${user.tag}** moved from <#${oldState.channelId}> to <#${newState.channelId}>`);
+        embed.setTitle("🎤 Voice Moved").setDescription(`**${user.tag}** moved from <#${oldState.channelId}> to <#${newState.channelId}>`).setColor("Blue");
     } else return;
-
     sendLog(embed);
 });
 
-// 2. KANAL İŞLEMLERİ
-client.on('channelCreate', channel => {
-    const embed = new EmbedBuilder()
-        .setTitle("📁 Channel Created")
-        .setDescription(`Name: **${channel.name}**\nType: ${channel.type}\nID: ${channel.id}`)
-        .setColor("Green").setTimestamp();
-    sendLog(embed);
-});
-
-client.on('channelDelete', channel => {
-    const embed = new EmbedBuilder()
-        .setTitle("🗑️ Channel Deleted")
-        .setDescription(`Name: **${channel.name}**\nID: ${channel.id}`)
-        .setColor("Red").setTimestamp();
-    sendLog(embed);
-});
-
-// 3. MESAJ SİLME VE DÜZENLEME
+// 2. MESAJ LOGLARI (SİLME/DÜZENLEME)
 client.on('messageDelete', message => {
-    if (message.author?.bot) return;
+    if (message.author?.bot || !message.content) return;
     const embed = new EmbedBuilder()
-        .setTitle("🚫 Message Deleted")
+        .setTitle("🗑️ Message Deleted")
         .addFields(
-            { name: "Author", value: `${message.author?.tag || "Unknown"}`, inline: true },
+            { name: "Author", value: `${message.author.tag}`, inline: true },
             { name: "Channel", value: `<#${message.channelId}>`, inline: true },
-            { name: "Content", value: message.content || "Empty/Image" }
+            { name: "Content", value: message.content.substring(0, 1024) }
         )
-        .setColor("Orange").setTimestamp();
+        .setColor("Red").setTimestamp();
     sendLog(embed);
 });
 
@@ -96,18 +70,19 @@ client.on('messageUpdate', (oldMsg, newMsg) => {
         .setTitle("📝 Message Edited")
         .addFields(
             { name: "Author", value: `${oldMsg.author.tag}`, inline: true },
-            { name: "Old", value: oldMsg.content || "None" },
-            { name: "New", value: newMsg.content || "None" }
+            { name: "Channel", value: `<#${oldMsg.channelId}>`, inline: true },
+            { name: "Old Content", value: oldMsg.content || "None" },
+            { name: "New Content", value: newMsg.content || "None" }
         )
-        .setColor("Yellow").setTimestamp();
+        .setColor("Orange").setTimestamp();
     sendLog(embed);
 });
 
-// 4. SUNUCUYA KATILAN / AYRILAN
+// 3. SUNUCU & ÜYE LOGLARI
 client.on('guildMemberAdd', member => {
     const embed = new EmbedBuilder()
-        .setTitle("👤 Member Joined")
-        .setDescription(`**${member.user.tag}** joined **${member.guild.name}**`)
+        .setTitle("📥 New Member Joined")
+        .setDescription(`${member.user.tag} has joined the server.`)
         .setThumbnail(member.user.displayAvatarURL())
         .setColor("Green").setTimestamp();
     sendLog(embed);
@@ -115,27 +90,48 @@ client.on('guildMemberAdd', member => {
 
 client.on('guildMemberRemove', member => {
     const embed = new EmbedBuilder()
-        .setTitle("🏃 Member Left")
-        .setDescription(`**${member.user.tag}** left **${member.guild.name}**`)
+        .setTitle("📤 Member Left/Kicked")
+        .setDescription(`${member.user.tag} left the server.`)
         .setColor("Red").setTimestamp();
     sendLog(embed);
+});
+
+client.on('guildBanAdd', ban => {
+    const embed = new EmbedBuilder()
+        .setTitle("🔨 User Banned")
+        .setDescription(`**${ban.user.tag}** was banned from **${ban.guild.name}**\nReason: ${ban.reason || "No reason provided"}`)
+        .setColor("DarkRed").setTimestamp();
+    sendLog(embed);
+});
+
+// 4. KANAL & ROL LOGLARI
+client.on('channelCreate', ch => {
+    sendLog(new EmbedBuilder().setTitle("🆕 Channel Created").setDescription(`Name: **${ch.name}**\nType: ${ch.type}`).setColor("Cyan").setTimestamp());
+});
+
+client.on('roleCreate', role => {
+    sendLog(new EmbedBuilder().setTitle("🎨 Role Created").setDescription(`Name: **${role.name}**\nID: ${role.id}`).setColor("Blue").setTimestamp());
+});
+
+client.on('roleDelete', role => {
+    sendLog(new EmbedBuilder().setTitle("🔥 Role Deleted").setDescription(`Name: **${role.name}**`).setColor("Black").setTimestamp());
 });
 
 // 5. KOMUT LOGLARI
 client.on('interactionCreate', async interaction => {
     if (!interaction.isChatInputCommand()) return;
     const embed = new EmbedBuilder()
-        .setTitle("🤖 Command Executive")
+        .setTitle("🚀 Command Executed")
         .addFields(
             { name: "User", value: interaction.user.tag, inline: true },
             { name: "Command", value: `/${interaction.commandName}`, inline: true },
             { name: "Server", value: interaction.guild?.name || "DM", inline: true }
         )
-        .setColor("Blurple").setTimestamp();
+        .setColor("Purple").setTimestamp();
     sendLog(embed);
 });
 
-// --- ANA ÇALIŞTIRICI ---
+// --- ANA BAŞLATICI ---
 (async () => {
   await checkForUpdates();
 
@@ -151,75 +147,57 @@ client.on('interactionCreate', async interaction => {
     await initializeMongoose();
   }
 
-  // --- AKILLI GÜNCELLEME SİSTEMİ ---
-  const updateSettings = {
-      channelId: "1479934586132758701", 
-      notes: "v1.2: Added Global Ban, Feedback system, and Announcement system.", 
-  };
-  
-  const { REST, Routes } = require('discord.js');
-
-client.once('ready', async () => {
-    console.log(`${client.user.tag} is online!`);
-
-    // --- SLASH KOMUTLARI EŞİTLEME SİSTEMİ ---
-    const rest = new REST({ version: '10' }).setToken(process.env.BOT_TOKEN);
-
-    try {
-        console.log('Started refreshing application (/) commands...');
-
-        // 1. Önce Discord'daki tüm eski (hayalet) komutları temizle
-        await rest.put(
-            Routes.applicationCommands(client.user.id),
-            { body: [] } // Boş liste göndererek her şeyi siliyoruz
-        );
-        console.log('Successfully deleted all old commands.');
-
-        // 2. Şimdi sadece dosyalarında olan güncel komutları yükle
-        // Not: client.slashCommands senin botunun komutları tuttuğu yerdir (isime göre değişebilir)
-        const commands = [];
-        client.commands.forEach(cmd => {
-            if (cmd.data) commands.push(cmd.data.toJSON());
-        });
-
-        await rest.put(
-            Routes.applicationCommands(client.user.id),
-            { body: commands }
-        );
-
-        console.log('Successfully reloaded current application (/) commands.');
-    } catch (error) {
-        console.error("Slash komutları güncellenirken hata:", error);
-    }
-    // ------------------------------------------
-});
-
+  // --- READY EVENTİ (SLASH & GÜNCELLEME NOTU) ---
   client.once('ready', async () => {
-      console.log(`${client.user.tag} is online!`);
+      console.log(`✅ Logged in as ${client.user.tag}`);
+      
+      // Durum Ayarla
+      client.user.setActivity(`${BOT_VERSION} | muhtesembotum.onrender.com`, { type: ActivityType.Watching });
+
+      // 1. SLASH KOMUTLARINI GÜNCELLE
+      const rest = new REST({ version: '10' }).setToken(process.env.BOT_TOKEN);
       try {
-          const channel = await client.channels.fetch(updateSettings.channelId);
-          if (!channel) return;
-          const messages = await channel.messages.fetch({ limit: 5 });
-          const lastBotMessage = messages.find(m => m.author.id === client.user.id && m.embeds.length > 0);
+          const commands = [];
+          client.commands.forEach(cmd => {
+              if (cmd.slashCommand?.enabled) {
+                  // Botunun yapısına göre data oluşturuluyor
+                  commands.push({
+                      name: cmd.name,
+                      description: cmd.description,
+                      options: cmd.slashCommand.options || []
+                  });
+              }
+          });
 
-          if (lastBotMessage && lastBotMessage.embeds[0].description === updateSettings.notes) {
-              console.log("⚠️ Güncelleme notu zaten paylaşılmış.");
-              return; 
+          await rest.put(Routes.applicationCommands(client.user.id), { body: commands });
+          console.log('Successfully reloaded application (/) commands.');
+      } catch (err) { console.error("Slash register error:", err); }
+
+      // 2. AKILLI GÜNCELLEME NOTU SİSTEMİ
+      const updateNotes = `**Version ${BOT_VERSION}** Feedback, globalban, dm, announcement, eklendi. Dashboard kuruldu, log sistemi geliştirildi.
+      - Müzik sistemi eklendi.`;
+      
+      try {
+          const channel = await client.channels.fetch(LOG_CHANNEL_ID);
+          if (channel) {
+              const messages = await channel.messages.fetch({ limit: 10 });
+              // Daha önce bu versiyon paylaşılmış mı kontrol et
+              const alreadyPosted = messages.some(m => m.embeds[0]?.title === "📢 New Bot Update!" && m.embeds[0]?.description.includes(`Version ${BOT_VERSION}`));
+
+              if (!alreadyPosted) {
+                  const updateEmbed = new EmbedBuilder()
+                      .setTitle("📢 New Bot Update!")
+                      .setDescription(updateNotes)
+                      .setColor("#00ff00")
+                      .setThumbnail(client.user.displayAvatarURL())
+                      .setTimestamp();
+                  await channel.send({ embeds: [updateEmbed] });
+                  console.log("✅ New update note posted!");
+              } else {
+                  console.log("⚠️ This version update is already posted.");
+              }
           }
-
-          const updateEmbed = new EmbedBuilder()
-              .setTitle("📢 New Bot Update!")
-              .setDescription(updateSettings.notes)
-              .setColor("#00ff00")
-              .setThumbnail(client.user.displayAvatarURL())
-              .setTimestamp()
-              .setFooter({ text: "Latest Update Log" });
-
-          await channel.send({ embeds: [updateEmbed] });
-          console.log("✅ Yeni güncelleme notu paylaşıldı!");
-      } catch (error) {
-          console.error("Güncelleme kontrol hatası:", error);
-      }
+      } catch (err) { console.error("Update log error:", err); }
   });
 
   await client.login(process.env.BOT_TOKEN);
