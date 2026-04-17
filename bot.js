@@ -1,10 +1,10 @@
 const LOG_CHANNEL_ID = "1479934586132758701";
 
 // --- EXPRESS (RENDER UPTIME) ---
-const express = require('express');
-const app = express();
-app.get('/', (req, res) => res.send('Bot Aktif! ✅'));
-app.listen(process.env.PORT || 10000);
+// const express = require('express');
+// const app = express();
+// app.get('/', (req, res) => res.send('Bot Aktif! ✅'));
+// app.listen(process.env.PORT || 10000); 
 
 require("dotenv").config();
 require("module-alias/register");
