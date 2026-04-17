@@ -156,6 +156,43 @@ client.on('interactionCreate', async interaction => {
       channelId: "1479934586132758701", 
       notes: "v1.2: Added Global Ban, Feedback system, and Announcement system.", 
   };
+  
+  const { REST, Routes } = require('discord.js');
+
+client.once('ready', async () => {
+    console.log(`${client.user.tag} is online!`);
+
+    // --- SLASH KOMUTLARI EŞİTLEME SİSTEMİ ---
+    const rest = new REST({ version: '10' }).setToken(process.env.BOT_TOKEN);
+
+    try {
+        console.log('Started refreshing application (/) commands...');
+
+        // 1. Önce Discord'daki tüm eski (hayalet) komutları temizle
+        await rest.put(
+            Routes.applicationCommands(client.user.id),
+            { body: [] } // Boş liste göndererek her şeyi siliyoruz
+        );
+        console.log('Successfully deleted all old commands.');
+
+        // 2. Şimdi sadece dosyalarında olan güncel komutları yükle
+        // Not: client.slashCommands senin botunun komutları tuttuğu yerdir (isime göre değişebilir)
+        const commands = [];
+        client.commands.forEach(cmd => {
+            if (cmd.data) commands.push(cmd.data.toJSON());
+        });
+
+        await rest.put(
+            Routes.applicationCommands(client.user.id),
+            { body: commands }
+        );
+
+        console.log('Successfully reloaded current application (/) commands.');
+    } catch (error) {
+        console.error("Slash komutları güncellenirken hata:", error);
+    }
+    // ------------------------------------------
+});
 
   client.once('ready', async () => {
       console.log(`${client.user.tag} is online!`);
