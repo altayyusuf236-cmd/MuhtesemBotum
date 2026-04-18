@@ -59,11 +59,11 @@ module.exports = {
     // Refer to https://github.com/freyacodes/Lavalink to host your own lavalink server
     LAVALINK_NODES: [
       {
-        host: "lava.link",
-        port: 80,
-        password: "youshallnotpass",
+        host: "lavalinkv4.serenetia.com",
+        port: 443,
+        password: "https://seretia.link/discord",
         id: "Public Node",
-        secure: false,
+        secure: true,
       },
     ],
   },
